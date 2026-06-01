@@ -25,7 +25,10 @@ import {
   Eye,
   EyeOff,
   Trash2,
-  ShieldAlert
+  ShieldAlert,
+  Coins,
+  Smartphone,
+  CreditCard
 } from 'lucide-react-native';
 import { api } from '../services/api';
 import { useAuth } from '../services/authContext';
@@ -39,6 +42,7 @@ export default function OverviewScreen() {
   // Quick Add Income Form
   const [incomeSource, setIncomeSource] = useState('');
   const [incomeAmount, setIncomeAmount] = useState('');
+  const [incomeAccount, setIncomeAccount] = useState('Cash');
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [incomeLoading, setIncomeLoading] = useState(false);
 
@@ -46,6 +50,7 @@ export default function OverviewScreen() {
   const [expenseCategory, setExpenseCategory] = useState('Food');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDesc, setExpenseDesc] = useState('');
+  const [expenseAccount, setExpenseAccount] = useState('Cash');
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expenseLoading, setExpenseLoading] = useState(false);
 
@@ -134,9 +139,11 @@ export default function OverviewScreen() {
       await api.post('/finance/income', {
         source: incomeSource,
         amount: amt,
+        account_type: incomeAccount,
       });
       setIncomeSource('');
       setIncomeAmount('');
+      setIncomeAccount('Cash');
       setShowIncomeForm(false);
       fetchSummary();
       Alert.alert('Success', 'Income logged successfully!');
@@ -164,9 +171,11 @@ export default function OverviewScreen() {
         category: expenseCategory,
         amount: amt,
         description: expenseDesc || `Logged via mobile`,
+        account_type: expenseAccount,
       });
       setExpenseAmount('');
       setExpenseDesc('');
+      setExpenseAccount('Cash');
       setShowExpenseForm(false);
       fetchSummary();
       Alert.alert('Success', 'Expense logged successfully!');
@@ -245,7 +254,9 @@ export default function OverviewScreen() {
   const target = isSliding ? tempSavingsTarget : (summary?.savingsTarget || 0);
   const remainingBudget = Math.max(0, income - target);
   const spent = summary?.totalExpenses || 0;
-  const budgetLeft = remainingBudget - spent;
+  const isDeficit = spent > remainingBudget;
+  const deficitAmount = isDeficit ? spent - remainingBudget : 0;
+  const budgetLeft = Math.max(0, remainingBudget - spent);
   const progressPct = income > 0 ? (target / income) * 100 : 0;
 
   return (
@@ -274,18 +285,30 @@ export default function OverviewScreen() {
         </View>
 
       {/* Daily Allowance Glowing Banner */}
-      <View style={styles.allowanceCard}>
-        <View style={styles.allowanceGlow} />
+      <View style={[styles.allowanceCard, isDeficit && { borderColor: 'rgba(239, 68, 68, 0.25)' }]}>
+        <View style={[styles.allowanceGlow, isDeficit && { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]} />
         <View style={styles.allowanceHeader}>
-          <Shield size={18} color="#3b82f6" />
-          <Text style={styles.allowanceTitle}>DAILY SPENDING ALLOWANCE</Text>
+          {isDeficit ? (
+            <ShieldAlert size={18} color="#ef4444" />
+          ) : (
+            <Shield size={18} color="#3b82f6" />
+          )}
+          <Text style={[styles.allowanceTitle, isDeficit && { color: '#ef4444' }]}>
+            {isDeficit ? 'BUDGET DEFICIT' : 'DAILY SPENDING ALLOWANCE'}
+          </Text>
         </View>
         <Text style={styles.allowanceAmount}>
-          Rs. {summary?.dailySpendingAllowance?.toLocaleString() || '0'}
+          Rs. {Math.max(0, summary?.dailySpendingAllowance || 0).toLocaleString()}
         </Text>
-        <Text style={styles.allowanceDays}>
-          Safe daily limit for the remaining {summary?.remainingDays || '0'} days
-        </Text>
+        {isDeficit ? (
+          <Text style={styles.allowanceDays}>
+            Overspent by Rs. {deficitAmount.toLocaleString()} with {summary?.remainingDays || '0'} days left this month
+          </Text>
+        ) : (
+          <Text style={styles.allowanceDays}>
+            Safe daily limit for the remaining {summary?.remainingDays || '0'} days
+          </Text>
+        )}
       </View>
 
       {/* Savings Target Slider Section */}
@@ -356,13 +379,86 @@ export default function OverviewScreen() {
         </View>
 
         <View style={styles.gridCard}>
-          <View style={[styles.gridIconContainer, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.25)' }]}>
-            <Wallet size={20} color="#3b82f6" />
+          <View style={[styles.gridIconContainer, isDeficit ? { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.25)' } : { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.25)' }]}>
+            <Wallet size={20} color={isDeficit ? '#ef4444' : '#3b82f6'} />
           </View>
           <Text style={styles.gridLabel}>Budget Left</Text>
-          <Text style={[styles.gridValue, { color: budgetLeft >= 0 ? '#3b82f6' : '#ef4444' }]}>
+          <Text style={[styles.gridValue, { color: isDeficit ? '#ef4444' : '#3b82f6' }]}>
             Rs. {budgetLeft.toLocaleString()}
           </Text>
+        </View>
+      </View>
+
+      {/* Wallet Accounts Breakdown Section */}
+      <View style={styles.sectionCard}>
+        <View style={styles.walletHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Wallet size={18} color="#3b82f6" />
+              <Text style={styles.cardTitle}>Wallet Accounts</Text>
+            </View>
+            <Text style={styles.cardSubtext}>Real-time balances across your payment methods</Text>
+          </View>
+          <View style={styles.totalBalanceBadge}>
+            <Text style={styles.totalBalanceBadgeLabel}>TOTAL BALANCE</Text>
+            <Text style={styles.totalBalanceBadgeVal}>
+              Rs. {summary?.totalBalance?.toLocaleString() || '0'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.walletGrid}>
+          {/* Cash Card */}
+          <View style={[styles.walletCard, { borderColor: 'rgba(245, 158, 11, 0.15)' }]}>
+            <View style={[styles.walletIconWrapper, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.2)' }]}>
+              <Coins size={16} color="#f59e0b" />
+            </View>
+            <View style={styles.walletCardInfo}>
+              <Text style={styles.walletCardLabel}>Cash</Text>
+              <Text style={styles.walletCardVal} numberOfLines={1}>
+                Rs. {summary?.accountBalances?.Cash?.toLocaleString() || '0'}
+              </Text>
+            </View>
+          </View>
+
+          {/* EasyPaisa Card */}
+          <View style={[styles.walletCard, { borderColor: 'rgba(16, 185, 129, 0.15)' }]}>
+            <View style={[styles.walletIconWrapper, { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.2)' }]}>
+              <Smartphone size={16} color="#10b981" />
+            </View>
+            <View style={styles.walletCardInfo}>
+              <Text style={styles.walletCardLabel}>EasyPaisa</Text>
+              <Text style={styles.walletCardVal} numberOfLines={1}>
+                Rs. {summary?.accountBalances?.EasyPaisa?.toLocaleString() || '0'}
+              </Text>
+            </View>
+          </View>
+
+          {/* JazzCash Card */}
+          <View style={[styles.walletCard, { borderColor: 'rgba(239, 68, 68, 0.15)' }]}>
+            <View style={[styles.walletIconWrapper, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)' }]}>
+              <CreditCard size={16} color="#ef4444" />
+            </View>
+            <View style={styles.walletCardInfo}>
+              <Text style={styles.walletCardLabel}>JazzCash</Text>
+              <Text style={styles.walletCardVal} numberOfLines={1}>
+                Rs. {summary?.accountBalances?.JazzCash?.toLocaleString() || '0'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Bank Card */}
+          <View style={[styles.walletCard, { borderColor: 'rgba(139, 92, 246, 0.15)' }]}>
+            <View style={[styles.walletIconWrapper, { backgroundColor: 'rgba(139, 92, 246, 0.1)', borderColor: 'rgba(139, 92, 246, 0.2)' }]}>
+              <Landmark size={16} color="#8b5cf6" />
+            </View>
+            <View style={styles.walletCardInfo}>
+              <Text style={styles.walletCardLabel}>Bank</Text>
+              <Text style={styles.walletCardVal} numberOfLines={1}>
+                Rs. {summary?.accountBalances?.Bank?.toLocaleString() || '0'}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -401,10 +497,33 @@ export default function OverviewScreen() {
               style={styles.input}
             />
 
+            <Text style={styles.formLabel}>Deposit To</Text>
+            <View style={styles.accountPicker}>
+              {['Cash', 'EasyPaisa', 'JazzCash', 'Bank'].map((acc) => (
+                <TouchableOpacity
+                  key={acc}
+                  onPress={() => setIncomeAccount(acc)}
+                  style={[
+                    styles.accountChip,
+                    incomeAccount === acc && styles.accountChipActiveGreen,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.accountChipText,
+                      incomeAccount === acc && styles.accountChipTextActiveGreen,
+                    ]}
+                  >
+                    {acc}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <TouchableOpacity
               onPress={handleAddIncome}
               disabled={incomeLoading}
-              style={[styles.submitButton, { backgroundColor: '#10b981' }]}
+              style={[styles.submitButton, { backgroundColor: '#10b981', marginTop: 8 }]}
             >
               {incomeLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Add Income</Text>}
             </TouchableOpacity>
@@ -467,10 +586,33 @@ export default function OverviewScreen() {
               style={styles.input}
             />
 
+            <Text style={styles.formLabel}>Paid From</Text>
+            <View style={styles.accountPicker}>
+              {['Cash', 'EasyPaisa', 'JazzCash', 'Bank'].map((acc) => (
+                <TouchableOpacity
+                  key={acc}
+                  onPress={() => setExpenseAccount(acc)}
+                  style={[
+                    styles.accountChip,
+                    expenseAccount === acc && styles.accountChipActiveRed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.accountChipText,
+                      expenseAccount === acc && styles.accountChipTextActiveRed,
+                    ]}
+                  >
+                    {acc}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <TouchableOpacity
               onPress={handleAddExpense}
               disabled={expenseLoading}
-              style={[styles.submitButton, { backgroundColor: '#ef4444' }]}
+              style={[styles.submitButton, { backgroundColor: '#ef4444', marginTop: 8 }]}
             >
               {expenseLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Add Expense</Text>}
             </TouchableOpacity>
@@ -950,5 +1092,107 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     lineHeight: 18,
     marginBottom: 8,
+  },
+  walletHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    paddingBottom: 12,
+    marginBottom: 16,
+  },
+  totalBalanceBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.25)',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignItems: 'flex-end',
+  },
+  totalBalanceBadgeLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.45)',
+    letterSpacing: 0.5,
+  },
+  totalBalanceBadgeVal: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  walletGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  walletCard: {
+    width: '48%',
+    backgroundColor: 'rgba(21, 28, 44, 0.45)',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  walletIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  walletCardInfo: {
+    flex: 1,
+  },
+  walletCardLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.45)',
+  },
+  walletCardVal: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  accountPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  accountChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  accountChipActiveGreen: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#10b981',
+  },
+  accountChipActiveRed: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderColor: '#ef4444',
+  },
+  accountChipText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+  },
+  accountChipTextActiveGreen: {
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  accountChipTextActiveRed: {
+    color: '#ef4444',
+    fontWeight: '600',
   },
 });
