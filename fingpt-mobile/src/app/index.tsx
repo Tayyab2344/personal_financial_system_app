@@ -9,8 +9,24 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Modal,
 } from 'react-native';
-import { LogOut, Plus, Landmark, ArrowUpRight, ArrowDownRight, Target, Shield, Wallet } from 'lucide-react-native';
+import { 
+  LogOut, 
+  Plus, 
+  Landmark, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  Target, 
+  Shield, 
+  Wallet,
+  Settings,
+  Lock,
+  Eye,
+  EyeOff,
+  Trash2,
+  ShieldAlert
+} from 'lucide-react-native';
 import { api } from '../services/api';
 import { useAuth } from '../services/authContext';
 
@@ -37,6 +53,17 @@ export default function OverviewScreen() {
   const [sliderWidth, setSliderWidth] = useState(0);
   const [tempSavingsTarget, setTempSavingsTarget] = useState(0);
   const [isSliding, setIsSliding] = useState(false);
+
+  // System Settings State
+  const [showSettings, setShowSettings] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const categories = ['Food', 'Fuel', 'Transport', 'Education', 'Shopping', 'Bills', 'Entertainment', 'Health', 'Other'];
 
@@ -150,6 +177,62 @@ export default function OverviewScreen() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      Alert.alert('Warning', 'All fields are required.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      Alert.alert('Warning', 'New password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Warning', 'New passwords do not match.');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await api.post('/auth/change-password', { oldPassword, newPassword });
+      Alert.alert('Success', 'Password updated successfully!');
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowSettings(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to change password. Double check your current password.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleResetData = () => {
+    Alert.alert(
+      'Danger Zone: Reset Vault',
+      'Are you absolutely sure you want to delete all transaction records, budgets, and savings goals? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reset Everything', 
+          style: 'destructive',
+          onPress: async () => {
+            setResetLoading(true);
+            try {
+              await api.post('/finance/reset', {});
+              Alert.alert('Success', 'All financial data has been wiped.');
+              setShowSettings(false);
+              fetchSummary();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to reset data.');
+            } finally {
+              setResetLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (loading && !summary) {
     return (
       <View style={styles.loaderContainer}>
@@ -166,23 +249,29 @@ export default function OverviewScreen() {
   const progressPct = income > 0 ? (target / income) * 100 : 0;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3b82f6" />
-      }
-    >
-      {/* Top Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Hello, {user?.name || 'User'}</Text>
-          <Text style={styles.dateText}>Finance Dashboard • {summary?.month || 'Current Month'}</Text>
+    <View style={{ flex: 1, backgroundColor: '#0b0f19' }}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3b82f6" />
+        }
+      >
+        {/* Top Header */}
+        <View style={styles.header}>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={styles.welcomeText} numberOfLines={1}>Hello, {user?.name || 'User'}</Text>
+            <Text style={styles.dateText}>Finance Dashboard • {summary?.month || 'Current Month'}</Text>
+          </View>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.settingsBtn}>
+              <Settings size={20} color="#3b82f6" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
+              <LogOut size={20} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
-          <LogOut size={20} color="#ef4444" />
-        </TouchableOpacity>
-      </View>
 
       {/* Daily Allowance Glowing Banner */}
       <View style={styles.allowanceCard}>
@@ -389,7 +478,118 @@ export default function OverviewScreen() {
         )}
       </View>
     </ScrollView>
-  );
+
+    <Modal
+      visible={showSettings}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setShowSettings(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>System Settings</Text>
+            <TouchableOpacity onPress={() => setShowSettings(false)} style={styles.modalCloseBtn}>
+              <Text style={styles.modalCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.modalScroll}>
+            {/* Change Password Form */}
+            <View style={styles.cardSection}>
+              <View style={styles.sectionHeader}>
+                <Lock size={18} color="#3b82f6" />
+                <Text style={styles.sectionTitle}>Change Password</Text>
+              </View>
+
+              <Text style={styles.formLabel}>Current Password</Text>
+              <View style={styles.modalInputWrapper}>
+                <TextInput
+                  placeholder="Current Password"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  secureTextEntry={!showOldPassword}
+                  value={oldPassword}
+                  onChangeText={setOldPassword}
+                  style={styles.modalInput}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity onPress={() => setShowOldPassword(!showOldPassword)} style={{ padding: 4 }}>
+                  {showOldPassword ? <EyeOff size={16} color="rgba(255,255,255,0.4)" /> : <Eye size={16} color="rgba(255,255,255,0.4)" />}
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.formLabel}>New Password</Text>
+              <View style={styles.modalInputWrapper}>
+                <TextInput
+                  placeholder="At least 6 characters"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  secureTextEntry={!showNewPassword}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  style={styles.modalInput}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)} style={{ padding: 4 }}>
+                  {showNewPassword ? <EyeOff size={16} color="rgba(255,255,255,0.4)" /> : <Eye size={16} color="rgba(255,255,255,0.4)" />}
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.formLabel}>Confirm New Password</Text>
+              <View style={styles.modalInputWrapper}>
+                <TextInput
+                  placeholder="Re-enter new password"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  secureTextEntry={!showConfirmPassword}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  style={styles.modalInput}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={{ padding: 4 }}>
+                  {showConfirmPassword ? <EyeOff size={16} color="rgba(255,255,255,0.4)" /> : <Eye size={16} color="rgba(255,255,255,0.4)" />}
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleChangePassword}
+                disabled={passwordLoading}
+                style={[styles.submitButton, { backgroundColor: '#3b82f6', marginTop: 16 }]}
+              >
+                {passwordLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Update Password</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Danger Zone Card */}
+            <View style={[styles.cardSection, { borderColor: 'rgba(239, 68, 68, 0.2)', backgroundColor: 'rgba(239, 68, 68, 0.02)', marginTop: 20 }]}>
+              <View style={styles.sectionHeader}>
+                <ShieldAlert size={18} color="#ef4444" />
+                <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>Danger Zone</Text>
+              </View>
+              <Text style={styles.dangerText}>
+                Resetting all vault data deletes all records of incomes, expenses, budgets, saving goals, and chat history. This action is permanent and cannot be undone.
+              </Text>
+              <TouchableOpacity
+                onPress={handleResetData}
+                disabled={resetLoading}
+                style={[styles.submitButton, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: '#ef4444', marginTop: 12 }]}
+              >
+                {resetLoading ? (
+                  <ActivityIndicator color="#ef4444" />
+                ) : (
+                  <Text style={[styles.submitButtonText, { color: '#ef4444' }]}>Reset All Vault Data</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
@@ -658,5 +858,97 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingsBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#0b0f19',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    paddingBottom: 16,
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalCloseText: {
+    fontSize: 20,
+    color: 'rgba(255, 255, 255, 0.45)',
+  },
+  modalScroll: {
+    paddingBottom: 20,
+  },
+  cardSection: {
+    backgroundColor: 'rgba(21, 28, 44, 0.65)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  modalInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(11, 15, 25, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    height: 44,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  modalInput: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  dangerText: {
+    fontSize: 12,
+    color: '#ef4444',
+    lineHeight: 18,
+    marginBottom: 8,
   },
 });

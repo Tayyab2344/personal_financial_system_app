@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Mail, Lock, User, Wallet } from 'lucide-react-native';
+import { Mail, Lock, User, Wallet, Eye, EyeOff } from 'lucide-react-native';
 import { api } from '../services/api';
 import { useAuth } from '../services/authContext';
 
@@ -21,6 +21,7 @@ export function AuthScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -127,9 +128,16 @@ export function AuthScreen() {
                 value={password}
                 onChangeText={setPassword}
                 style={styles.input}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+                {showPassword ? (
+                  <EyeOff size={18} color="rgba(255,255,255,0.4)" />
+                ) : (
+                  <Eye size={18} color="rgba(255,255,255,0.4)" />
+                )}
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
